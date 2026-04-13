@@ -1,0 +1,21 @@
+services:
+  ctfcont:
+    build: .
+    image: ctfcont:latest
+    container_name: ctfcont
+    stdin_open: true
+    tty: true
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+    volumes:
+      # Read-only source — the code Claude analyzes
+      - ${SOURCE_DIR}:/src:ro
+      # Writable output — patches, diffs, findings go here
+      - ${OUTPUT_DIR}:/output
+      # Persist Claude config/auth across sessions
+      - ctfcont-claude-home:/home/ctf/.claude
+    working_dir: /src
+
+volumes:
+  ctfcont-claude-home:
