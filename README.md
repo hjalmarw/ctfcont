@@ -26,17 +26,23 @@ docker build -t ctfcont:latest .
 
 ## run
 
+```bash
+# interactive pi session
+./ctfcont
+
+# one-shot — injects AGENTS.md as system prompt, prints and exits
+./ctfcont "find me a vuln in this code"
+./ctfcont "what crypto is being used and is it broken"
+./ctfcont "look for hardcoded secrets or backdoors"
 ```
-docker-compose up -d
-docker-compose exec ctfcont bash
-pi
-```
+
+reads `.env` automatically. no args = interactive. args = one-shot.
 
 ## layout
 
 ```
 /src     ro   target code. don't touch.
-/output  rw   your diffs, patches, notes.
+/output  rw   your diffs, patches, notes, findings.md
 ```
 
 ## tools
