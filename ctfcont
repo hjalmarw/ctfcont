@@ -24,7 +24,11 @@ fi
 : "${OUTPUT_DIR:?ERROR: OUTPUT_DIR is not set}"
 
 IMAGE="192.168.1.17:32768/ctfcont:latest"
-AGENTS_MD="/home/ctf/.pi/agent/AGENTS.md"
+
+# Flags needed to stay under proxy guardrail limits:
+# --no-prompt-templates --no-skills --no-extensions keeps the system prompt lean
+PI_BASE="pi --provider anthropic --no-prompt-templates --no-skills --no-extensions"
+PI_ONESHOT="${PI_BASE}"
 
 DOCKER_ARGS=(
     run --rm -it
@@ -32,17 +36,18 @@ DOCKER_ARGS=(
     -e "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}"
     -v "${SOURCE_DIR}:/src:ro"
     -v "${OUTPUT_DIR}:/output"
+    # Persist pi config, skills clone, and graphify install across runs
+    -v "ctfcont-pi-home:/home/ctf/.pi"
+    -v "ctfcont-claude-home:/home/ctf/.claude"
     "${IMAGE}"
 )
 
 if [ $# -eq 0 ]; then
     # interactive session — pi auto-loads AGENTS.md from ~/.pi/agent/
-    exec docker "${DOCKER_ARGS[@]}" pi --provider anthropic
+    exec docker "${DOCKER_ARGS[@]}" ${PI_BASE}
 else
-    # one-shot: inject AGENTS.md as system prompt + user question via -p
+    # one-shot: user question via -p, AGENTS.md loaded automatically from ~/.pi/agent/
     USER_PROMPT="$*"
     exec docker "${DOCKER_ARGS[@]}" \
-        bash -c "pi --provider anthropic \
-                    --system-prompt \"\$(cat ${AGENTS_MD})\" \
-                    -p $(printf '%q' "${USER_PROMPT}")"
+        bash -c "${PI_ONESHOT} -p $(printf '%q' "${USER_PROMPT}")"
 fi
