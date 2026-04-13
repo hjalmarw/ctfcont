@@ -1,0 +1,48 @@
+#!/bin/bash
+# ctfcont — run pi against a target codebase
+# Usage:
+#   ctfcont                              # interactive pi session
+#   ctfcont "find me a vuln in this"    # one-shot, prints and exits
+#
+# Reads SOURCE_DIR, OUTPUT_DIR, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL from
+# .env in the same directory as this script (all overrideable via environment).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source .env if present, without overriding already-set env vars
+if [ -f "${SCRIPT_DIR}/.env" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/.env"
+    set +a
+fi
+
+: "${ANTHROPIC_API_KEY:?ERROR: ANTHROPIC_API_KEY is not set}"
+: "${SOURCE_DIR:?ERROR: SOURCE_DIR is not set}"
+: "${OUTPUT_DIR:?ERROR: OUTPUT_DIR is not set}"
+
+IMAGE="192.168.1.17:32768/ctfcont:latest"
+AGENTS_MD="/home/ctf/.pi/agent/AGENTS.md"
+
+DOCKER_ARGS=(
+    run --rm -it
+    -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+    -e "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}"
+    -v "${SOURCE_DIR}:/src:ro"
+    -v "${OUTPUT_DIR}:/output"
+    "${IMAGE}"
+)
+
+if [ $# -eq 0 ]; then
+    # interactive session — pi auto-loads AGENTS.md from ~/.pi/agent/
+    exec docker "${DOCKER_ARGS[@]}" pi --provider anthropic
+else
+    # one-shot: inject AGENTS.md as system prompt + user question via -p
+    USER_PROMPT="$*"
+    exec docker "${DOCKER_ARGS[@]}" \
+        bash -c "pi --provider anthropic \
+                    --system-prompt \"\$(cat ${AGENTS_MD})\" \
+                    -p $(printf '%q' "${USER_PROMPT}")"
+fi

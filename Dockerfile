@@ -52,6 +52,10 @@ RUN useradd -m -s /bin/bash ctf \
     && mkdir -p /src /output \
     && chown ctf:ctf /src /output
 
+# ── Bake AGENTS.md into pi's global auto-load path ───────────────────────────
+RUN mkdir -p /home/ctf/.pi/agent && chown -R ctf:ctf /home/ctf/.pi
+COPY --chown=ctf:ctf AGENTS.md /home/ctf/.pi/agent/AGENTS.md
+
 # ── Entrypoint script ─────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
