@@ -44,17 +44,19 @@ RUN git clone --depth=1 https://github.com/radareorg/radare2 /tmp/radare2 \
     && /tmp/radare2/sys/install.sh \
     && rm -rf /tmp/radare2
 
-# ── Claude Code CLI ──────────────────────────────────────────────────────────
-RUN npm install -g @anthropic-ai/claude-code
+# ── Pi coding agent ──────────────────────────────────────────────────────────
+RUN npm install -g @mariozechner/pi-coding-agent
 
-# ── Non-root user ────────────────────────────────────────────────────────────
-RUN useradd -m -s /bin/bash ctf
+# ── Non-root user + mount point ownership ────────────────────────────────────
+RUN useradd -m -s /bin/bash ctf \
+    && mkdir -p /src /output \
+    && chown ctf:ctf /src /output
 
 # ── Entrypoint script ─────────────────────────────────────────────────────────
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-WORKDIR /workspace
+WORKDIR /src
 
 USER ctf
 

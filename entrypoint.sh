@@ -1,68 +1,50 @@
 #!/bin/bash
 set -e
 
-STAMP_DIR="${HOME}/.claude/.ctfcont_installed"
-mkdir -p "${STAMP_DIR}"
+STAMP_DIR="${HOME}/.pi/.ctfcont_installed"
+PI_AGENT_DIR="${HOME}/.pi/agent"
+mkdir -p "${STAMP_DIR}" "${PI_AGENT_DIR}"
 
-# ── 1. graphifyy setup ────────────────────────────────────────────────────────
+# ── 1. Configure pi models.json (proxy base URL) ──────────────────────────────
+# Always rewrite so a changed ANTHROPIC_BASE_URL takes effect on restart.
+MODELS_JSON="${PI_AGENT_DIR}/models.json"
+if [ -n "${ANTHROPIC_BASE_URL}" ]; then
+    echo "[ctfcont] Configuring pi Anthropic proxy -> ${ANTHROPIC_BASE_URL}"
+    python3 - <<PYEOF
+import json, os
+
+models_path = os.path.expanduser("~/.pi/agent/models.json")
+base_url    = os.environ["ANTHROPIC_BASE_URL"].rstrip("/")
+
+try:
+    with open(models_path) as f:
+        cfg = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    cfg = {}
+
+cfg.setdefault("providers", {})
+cfg["providers"].setdefault("anthropic", {})
+cfg["providers"]["anthropic"]["baseUrl"] = base_url
+
+with open(models_path, "w") as f:
+    json.dump(cfg, f, indent=2)
+PYEOF
+else
+    echo "[ctfcont] ANTHROPIC_BASE_URL not set — using default Anthropic endpoint"
+fi
+
+# ── 2. graphifyy setup ────────────────────────────────────────────────────────
 if [ ! -f "${STAMP_DIR}/graphifyy" ]; then
     echo "[ctfcont] Running graphify install..."
     graphify install && touch "${STAMP_DIR}/graphifyy"
 fi
 
-# ── 2. wshobson reverse-engineering plugin ────────────────────────────────────
-if [ ! -f "${STAMP_DIR}/wshobson_re" ]; then
-    echo "[ctfcont] Installing wshobson reverse-engineering plugin..."
-    npx claudepluginhub wshobson/agents --plugin reverse-engineering \
-        && touch "${STAMP_DIR}/wshobson_re"
-fi
-
-# ── 3. Trail of Bits skills marketplace ──────────────────────────────────────
-TOB_DIR="${HOME}/.claude/trailofbits-skills"
-if [ ! -f "${STAMP_DIR}/trailofbits_skills" ]; then
-    echo "[ctfcont] Cloning Trail of Bits skills..."
-    git clone --depth=1 https://github.com/trailofbits/skills.git "${TOB_DIR}" \
-        && touch "${STAMP_DIR}/trailofbits_skills"
-else
-    # Pull updates silently on subsequent starts
-    git -C "${TOB_DIR}" pull --ff-only -q 2>/dev/null || true
-fi
-
-# Wire up the ToB marketplace in Claude settings if not already present
-CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
-if [ ! -f "${CLAUDE_SETTINGS}" ]; then
-    echo '{}' > "${CLAUDE_SETTINGS}"
-fi
-
-# Inject the marketplace path if missing (jq-free, safe append approach)
-if ! grep -q "trailofbits-skills" "${CLAUDE_SETTINGS}" 2>/dev/null; then
-    echo "[ctfcont] Registering Trail of Bits marketplace in Claude settings..."
-    python3 - <<PYEOF
-import json, os
-
-settings_path = os.path.expanduser("~/.claude/settings.json")
-with open(settings_path) as f:
-    settings = json.load(f)
-
-tob_path = os.path.expanduser("~/.claude/trailofbits-skills")
-
-marketplaces = settings.get("pluginMarketplaces", [])
-if tob_path not in marketplaces:
-    marketplaces.append(tob_path)
-settings["pluginMarketplaces"] = marketplaces
-
-with open(settings_path, "w") as f:
-    json.dump(settings, f, indent=2)
-
-print("[ctfcont] Trail of Bits marketplace registered.")
-PYEOF
-fi
-
-# ── 4. Write CLAUDE.md into /src so Claude knows the layout ──────────────────
-# /src is read-only so we write it to /output and symlink, or just inject via
-# the home-level CLAUDE.md which Claude always loads.
-GLOBAL_CLAUDE_MD="${HOME}/.claude/CLAUDE.md"
-cat > "${GLOBAL_CLAUDE_MD}" <<'EOF'
+# ── 3. Pi workspace context file ──────────────────────────────────────────────
+# Pi loads AGENTS.md from the working directory automatically.
+# Write it to /output (writable) and also to the pi config dir as fallback.
+AGENTS_MD="/output/AGENTS.md"
+if [ ! -f "${AGENTS_MD}" ]; then
+    cat > "${AGENTS_MD}" <<'EOF'
 # ctfcont — workspace layout
 
 ## Directories
@@ -71,20 +53,21 @@ cat > "${GLOBAL_CLAUDE_MD}" <<'EOF'
               patches (.patch), diffs (.diff), findings (findings.md),
               scripts, notes, and any generated files.
 
-## Workflow expectations
+## Workflow
 - Analyse code from `/src`
 - Save every finding, patch, and generated artifact to `/output`
-- Use unified diff format (`diff -u`) for patches when possible
+- Use unified diff format (`diff -u`) for patches
 - Name files descriptively: `vuln_overflow_main.patch`, `findings.md`, etc.
 EOF
+fi
 
 echo "[ctfcont] Environment ready."
 echo ""
 echo "  /src    → target source (read-only)"
-echo "  /output → your findings, patches, diffs (writable)"
+echo "  /output → findings, patches, diffs (writable)"
 echo ""
-echo "  Tools: claude, gdb, strace, ltrace, r2, pwntools, semgrep, bandit, angr, afl++"
+echo "  Run: pi"
+echo "  Tools: pi, gdb, strace, ltrace, r2, pwntools, semgrep, bandit, angr, afl++"
 echo ""
 
-# Hand off to CMD (default: bash)
 exec "$@"
